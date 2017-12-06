@@ -32,7 +32,7 @@ namespace Dynatrace.OpenKit.API {
         void ReportCrash(string errorName, string reason, string stacktrace);
 
         /// <summary>
-        ///  Ends this Session and marks it as ready for sending.
+        ///  Ends this Session and marks it as ready for immediate sending.
         /// </summary>
         void End();
 

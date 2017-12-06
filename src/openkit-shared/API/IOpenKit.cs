@@ -21,7 +21,7 @@ namespace Dynatrace.OpenKit.API
         /// <see cref="IOpenKit.Shutdown"/>@link #shutdown()} method.
         /// 
         /// Be aware, if {@link com.dynatrace.openkit.OpenKitFactory} is wrongly configured, for example when creating an
-        /// instance with a incorrect endpoint URL, then this method might hang indefinitely, unless <see cref="IOpenKit.Shutdown"/> is called.
+        /// instance with an incorrect endpoint URL, then this method might hang indefinitely, unless <see cref="IOpenKit.Shutdown"/> is called.
         /// </remarks>
         /// 
         /// <returns><code>true</code> if OpenKit is fully initialized, <code>false</code> when a shutdown request was made. </returns>
@@ -36,7 +36,7 @@ namespace Dynatrace.OpenKit.API
         ///  <see cref="IOpenKit.Shutdown"/> method or the timeout expired.
         /// 
         ///  Be aware, if {@link com.dynatrace.openkit.OpenKitFactory} is wrongly configured, for example when creating an
-        ///  instance with a incorrect endpoint URL, then this method might hang indefinitely, unless <see cref="IOpenKit.Shutdown"/> is called 
+        ///  instance with an incorrect endpoint URL, then this method might hang indefinitely, unless <see cref="IOpenKit.Shutdown"/> is called 
         ///  or timeout expires.
         /// </remarks>
         /// 

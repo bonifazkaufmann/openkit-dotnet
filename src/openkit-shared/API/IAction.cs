@@ -89,7 +89,7 @@ namespace Dynatrace.OpenKit.API {
         /// <summary>
         ///  Leaves this Action.
         /// </summary>
-        /// <returns>the parent Action</returns>
+        /// <returns>the parent Action, or null if there is no parent Action</returns>
         IAction LeaveAction();
 
     }
