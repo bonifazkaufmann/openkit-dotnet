@@ -1,17 +1,30 @@
-﻿/***************************************************
- * (c) 2016-2017 Dynatrace LLC
- *
- * @author: Johannes Bäuerle
- */
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
 using System;
 using System.Text.RegularExpressions;
 
-namespace Dynatrace.OpenKit.Core.Util {
+namespace Dynatrace.OpenKit.Core.Util
+{
 
     /// <summary>
     ///  Utility to check if a InetAddress is valid
     /// </summary>
-    public class InetAddressValidator {
+    public class InetAddressValidator
+    {
         private static readonly Regex IpV4Regex = new Regex("^(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)){3}$");
 
         private static readonly Regex IpV6Regex = new Regex("^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$");
@@ -93,7 +106,7 @@ namespace Dynatrace.OpenKit.Core.Util {
         /// <param name="input">input ip-address to check</param>
         /// <returns>@return true if input is in correct IPv6 (mixed-standard or mixed-compressed) notation.</returns>
         ///
-        public static bool IsIPv6MixedAddress(string input )
+        public static bool IsIPv6MixedAddress(string input)
         {
             return IpV6MixedRegex.Match(input).Success;
         }

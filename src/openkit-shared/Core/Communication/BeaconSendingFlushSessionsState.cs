@@ -1,4 +1,20 @@
-﻿using System;
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+using System;
 
 namespace Dynatrace.OpenKit.Core.Communication
 {
@@ -14,7 +30,7 @@ namespace Dynatrace.OpenKit.Core.Communication
     {
         public const int BEACON_SEND_RETRY_ATTEMPTS = 0; // do not retry beacon sending on error
 
-        public BeaconSendingFlushSessionsState() : base(false) {}
+        public BeaconSendingFlushSessionsState() : base(false) { }
 
         internal override AbstractBeaconSendingState ShutdownState => new BeaconSendingTerminalState();
 
@@ -31,7 +47,8 @@ namespace Dynatrace.OpenKit.Core.Communication
             var finishedSession = context.GetNextFinishedSession();
             while (finishedSession != null)
             {
-                finishedSession.SendBeacon(context.HTTPClientProvider, BEACON_SEND_RETRY_ATTEMPTS);
+                finishedSession.SendBeacon(context.HTTPClientProvider);
+                finishedSession.ClearCapturedData();
                 finishedSession = context.GetNextFinishedSession();
             }
 

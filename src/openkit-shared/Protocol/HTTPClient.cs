@@ -1,9 +1,24 @@
-﻿/***************************************************
- * (c) 2016-2017 Dynatrace LLC
- *
- * @author: Christian Schwarzbauer
- */
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+using Dynatrace.OpenKit.API;
+using Dynatrace.OpenKit.Core.Configuration;
 using System;
+using System.IO;
+using System.IO.Compression;
 using System.Text;
 using System.Threading;
 
@@ -23,21 +38,15 @@ namespace Dynatrace.OpenKit.Protocol
         {
 
             public static readonly RequestType STATUS = new RequestType("Status");              // status check
-            public static readonly RequestType BEACON = new RequestType("Beacon");				// beacon send
+            public static readonly RequestType BEACON = new RequestType("Beacon");              // beacon send
             public static readonly RequestType TIMESYNC = new RequestType("TimeSync");          // time sync
 
-            private string requestName;
+            public string RequestName { get; }
 
             private RequestType(string requestName)
             {
-                this.requestName = requestName;
+                RequestName = requestName;
             }
-
-            public string getRequestName()
-            {
-                return requestName;
-            }
-
         }
 
         public class HTTPResponse
@@ -55,32 +64,32 @@ namespace Dynatrace.OpenKit.Protocol
         private const string QUERY_KEY_APPLICATION = "app";
         private const string QUERY_KEY_VERSION = "va";
         private const string QUERY_KEY_PLATFORM_TYPE = "pt";
+        private const string QUERY_KEY_AGENT_TECHNOLOGY_TYPE = "tt";
 
         // constant query parameter values
         private const string PLATFORM_TYPE_OPENKIT = "1";
+        private const string AGENT_TECHNOLOGY_TYPE = "okdotnet";
 
         // connection constants
         private const int MAX_SEND_RETRIES = 3;
         private const int RETRY_SLEEP_TIME = 200;       // retry sleep time in ms
 
         // URLs for requests
-        private string monitorURL;
-        private string timeSyncURL;
+        private readonly string monitorURL;
+        private readonly string timeSyncURL;
 
-        private int serverID;
-        private bool verbose;
+        private readonly int serverID;
+        private readonly ILogger logger;
 
         // *** constructors ***
 
-        public HTTPClient(string baseURL, string applicationID, int serverID, bool verbose)
+        public HTTPClient(ILogger logger, HTTPClientConfiguration configuration)
         {
-            this.serverID = serverID;
-            this.verbose = verbose;
-            this.monitorURL = BuildMonitorURL(baseURL, applicationID, serverID);
-            this.timeSyncURL = BuildTimeSyncURL(baseURL);
+            this.logger = logger;
+            serverID = configuration.ServerID;
+            monitorURL = BuildMonitorURL(configuration.BaseURL, configuration.ApplicationID, configuration.ServerID);
+            timeSyncURL = BuildTimeSyncURL(configuration.BaseURL);
         }
-
-        // *** public methods ***
 
         // sends a status check request and returns a status response
         public StatusResponse SendStatusRequest()
@@ -100,33 +109,26 @@ namespace Dynatrace.OpenKit.Protocol
             return (TimeSyncResponse)SendRequest(RequestType.TIMESYNC, timeSyncURL, null, null, "GET");
         }
 
-        // *** private methods ***
-
         // generic request send with some verbose output and exception handling
         protected Response SendRequest(RequestType requestType, string url, string clientIPAddress, byte[] data, string method)
         {
             try
             {
-                if (verbose)
+                if (logger.IsDebugEnabled)
                 {
-                    Console.WriteLine("HTTP " + requestType.getRequestName() + " Request: " + url);
+                    logger.Debug("HTTP " + requestType.RequestName + " Request: " + url);
                 }
-                return SendRequestInternal(url, clientIPAddress, data, method);
+                return SendRequestInternal(requestType, url, clientIPAddress, data, method);
             }
             catch (Exception e)
             {
-                if (verbose)
-                {
-                    Console.WriteLine("ERROR: " + requestType.getRequestName() + " Request failed!");
-                    Console.WriteLine(e.Message);
-                    Console.WriteLine(e.StackTrace);
-                }
+                logger.Error(requestType.RequestName + " Request failed!", e);
             }
             return null;
         }
 
         // generic internal request send
-        protected Response SendRequestInternal(string url, string clientIPAddress, byte[] data, string method)
+        protected Response SendRequestInternal(RequestType requestType, string url, string clientIPAddress, byte[] data, string method)
         {
             int retry = 1;
             while (true)
@@ -138,14 +140,14 @@ namespace Dynatrace.OpenKit.Protocol
                     byte[] gzippedData = null;
                     if ((data != null) && (data.Length > 0))
                     {
-                        gzippedData = GZip(data);
+                        gzippedData = CompressByteArray(data);
 
-                        if (verbose)
+                        if (logger.IsDebugEnabled)
                         {
-                            Console.WriteLine("Beacon Payload: " + Encoding.UTF8.GetString(data));
+                            logger.Debug("Beacon Payload: " + Encoding.UTF8.GetString(data));
                         }
                     }
-                                                         
+
                     HTTPResponse httpResponse = null;
                     if (method == "GET")
                     {
@@ -160,29 +162,31 @@ namespace Dynatrace.OpenKit.Protocol
                         return null;
                     }
 
-                    if (verbose)
+                    if (logger.IsDebugEnabled)
                     {
-                        Console.WriteLine("HTTP Response: " + httpResponse.Response);
-                        Console.WriteLine("HTTP Response Code: " + httpResponse.ResponseCode);
+                        logger.Debug("HTTP Response: " + httpResponse.Response);
+                        logger.Debug("HTTP Response Code: " + httpResponse.ResponseCode);
                     }
 
-                    if (httpResponse.ResponseCode >= 400)
+                    if (httpResponse.Response == null || httpResponse.ResponseCode >= 400)
                     {
                         // an error occurred -> return null
                         return null;
                     }
 
-                    // create typed response based on response content
-                    if (httpResponse.Response.StartsWith(REQUEST_TYPE_TIMESYNC))
+                    // create typed response based on request type and response content
+                    if (requestType.RequestName == RequestType.TIMESYNC.RequestName)
                     {
-                        return new TimeSyncResponse(httpResponse.Response, httpResponse.ResponseCode);
+                        return ParseTimeSyncResponse(httpResponse);
                     }
-                    else if (httpResponse.Response.StartsWith(REQUEST_TYPE_MOBILE))
+                    else if ((requestType.RequestName == RequestType.BEACON.RequestName)
+                        || (requestType.RequestName == RequestType.STATUS.RequestName))
                     {
-                        return new StatusResponse(httpResponse.Response, httpResponse.ResponseCode);
+                        return ParseStatusResponse(httpResponse);
                     }
                     else
                     {
+                        logger.Warn("Unknown request type " + requestType + " - ignoring response");
                         return null;
                     }
                 }
@@ -197,6 +201,56 @@ namespace Dynatrace.OpenKit.Protocol
                     Thread.Sleep(RETRY_SLEEP_TIME);
                 }
             }
+        }
+
+        private Response ParseStatusResponse(HTTPResponse httpResponse)
+        {
+            if (IsStatusResponse(httpResponse) && !IsTimeSyncResponse(httpResponse))
+            {
+                try
+                {
+                    return new StatusResponse(httpResponse.Response, httpResponse.ResponseCode);
+                }
+                catch (Exception e)
+                {
+                    logger.Error("Failed to parse StatusResponse", e);
+                    return null;
+                }
+            }
+
+            // invalid/unexpected response
+            logger.Warn("The HTTPResponse \"" + httpResponse.Response + "\" is not a valid status response");
+            return null;
+        }
+
+        private Response ParseTimeSyncResponse(HTTPResponse httpResponse)
+        {
+            if (IsTimeSyncResponse(httpResponse))
+            {
+                try
+                {
+                    return new TimeSyncResponse(httpResponse.Response, httpResponse.ResponseCode);
+                }
+                catch(Exception e)
+                {
+                    logger.Error("Failed to parse TimeSyncResponse", e);
+                    return null;
+                }
+            }
+
+            // invalid/unexpected response
+            logger.Warn("The HTTPResponse \"" + httpResponse.Response + "\" is not a valid time sync response");
+            return null;
+        }
+
+        private static bool IsStatusResponse(HTTPResponse httpResponse)
+        {
+            return httpResponse.Response.StartsWith(REQUEST_TYPE_MOBILE);
+        }
+
+        private static bool IsTimeSyncResponse(HTTPResponse httpResponse)
+        {
+            return httpResponse.Response.StartsWith(REQUEST_TYPE_TIMESYNC);
         }
 
         protected abstract HTTPResponse GetRequest(string url, string clientIPAddress);
@@ -216,6 +270,7 @@ namespace Dynatrace.OpenKit.Protocol
             AppendQueryParam(monitorURLBuilder, QUERY_KEY_APPLICATION, applicationID);
             AppendQueryParam(monitorURLBuilder, QUERY_KEY_VERSION, Beacon.OPENKIT_VERSION);
             AppendQueryParam(monitorURLBuilder, QUERY_KEY_PLATFORM_TYPE, PLATFORM_TYPE_OPENKIT);
+            AppendQueryParam(monitorURLBuilder, QUERY_KEY_AGENT_TECHNOLOGY_TYPE, AGENT_TECHNOLOGY_TYPE);
 
             return monitorURLBuilder.ToString();
         }
@@ -241,11 +296,17 @@ namespace Dynatrace.OpenKit.Protocol
             urlBuilder.Append(System.Uri.EscapeDataString(value));
         }
 
-        // helper method for gzipping beacon data
-        private static byte[] GZip(byte[] data)
+        private byte[] CompressByteArray(byte[] raw)
         {
-            // gzip code taken from DotNetZip: http://dotnetzip.codeplex.com/
-            return Ionic.Zlib.GZipStream.CompressBuffer(data);
+            using (MemoryStream memory = new MemoryStream())
+            {
+                using (GZipStream gzip = new GZipStream(memory,
+                    CompressionMode.Compress, true))
+                {
+                    gzip.Write(raw, 0, raw.Length);
+                }
+                return memory.ToArray();
+            }
         }
     }
 }

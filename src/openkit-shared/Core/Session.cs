@@ -1,12 +1,23 @@
-﻿/***************************************************
- * (c) 2016-2017 Dynatrace LLC
- *
- * @author: Christian Schwarzbauer
- */
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
 using Dynatrace.OpenKit.API;
-using Dynatrace.OpenKit.Core.Configuration;
 using Dynatrace.OpenKit.Protocol;
 using Dynatrace.OpenKit.Providers;
+using System.Threading;
 
 namespace Dynatrace.OpenKit.Core
 {
@@ -16,6 +27,8 @@ namespace Dynatrace.OpenKit.Core
     /// </summary>
     public class Session : ISession
     {
+        private static readonly NullRootAction NullRootAction = new NullRootAction();
+
         // end time of this Session
         private long endTime = -1;
 
@@ -26,33 +39,63 @@ namespace Dynatrace.OpenKit.Core
         // used for taking care to really leave all Actions at the end of this Session
         private SynchronizedQueue<IAction> openRootActions = new SynchronizedQueue<IAction>();
 
-        // *** constructors ***
 
-        public Session(AbstractConfiguration configuration, string clientIPAddress, BeaconSender beaconSender)
+        public Session(BeaconSender beaconSender, Beacon beacon)
         {
             this.beaconSender = beaconSender;
+            this.beacon = beacon;
 
-            // beacon has to be created immediately, as the session start time is taken at beacon construction
-            beacon = new Beacon(configuration, clientIPAddress);
             beaconSender.StartSession(this);
         }
 
+        /// <summary>
+        /// Test if this Session is empty or not.
+        /// 
+        /// A session is considered to be empty, if it does not contain any action or event data.
+        /// </summary>
+        public bool IsEmpty => beacon.IsEmpty;
+
+        public long EndTime => Interlocked.Read(ref endTime);
+
+        internal bool IsSessionEnded => EndTime != -1;
+
         // *** ISession interface methods ***
+
+        public void Dispose()
+        {
+            End();
+        }
 
         public IRootAction EnterAction(string actionName)
         {
-            return new RootAction(beacon, actionName, openRootActions);
+            if (!IsSessionEnded)
+            {
+                return new RootAction(beacon, actionName, openRootActions);
+            }
+
+            return NullRootAction;
+        }
+
+        public void IdentifyUser(string userTag)
+        {
+            if (!IsSessionEnded)
+            {
+                beacon.IdentifyUser(userTag);
+            }
         }
 
         public void ReportCrash(string errorName, string reason, string stacktrace)
         {
-            beacon.ReportCrash(errorName, reason, stacktrace);
+            if (!IsSessionEnded)
+            {
+                beacon.ReportCrash(errorName, reason, stacktrace);
+            }
         }
 
         public void End()
         {
             // check if end() was already called before by looking at endTime
-            if (endTime != -1)
+            if (Interlocked.CompareExchange(ref endTime, beacon.CurrentTimestamp, -1L) != -1L)
             {
                 return;
             }
@@ -64,7 +107,7 @@ namespace Dynatrace.OpenKit.Core
                 action.LeaveAction();
             }
 
-            endTime = TimeProvider.GetTimestamp();
+            endTime = beacon.CurrentTimestamp;
 
             // create end session data on beacon
             beacon.EndSession(this);
@@ -73,28 +116,18 @@ namespace Dynatrace.OpenKit.Core
             beaconSender.FinishSession(this);
         }
 
-        // *** public methods ***
-
         // sends the current Beacon state
-        public StatusResponse SendBeacon(IHTTPClientProvider clientProvider, int numRetries)
+        public StatusResponse SendBeacon(IHTTPClientProvider clientProvider)
         {
-            return beacon.Send(clientProvider, numRetries);
+            return beacon.Send(clientProvider);
         }
-
-        public void IdentifyUser(string userId)
+        
+        /// <summary>
+        /// Clear captured beacon data.
+        /// </summary>
+        internal void ClearCapturedData()
         {
-            beacon.IdentifyUser(userId);
+            beacon.ClearData();
         }
-
-        // *** properties ***
-
-        public long EndTime
-        {
-            get
-            {
-                return endTime;
-            }
-        }
-
     }
 }

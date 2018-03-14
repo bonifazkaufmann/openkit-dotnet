@@ -1,4 +1,20 @@
-﻿using Dynatrace.OpenKit.Protocol;
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+using Dynatrace.OpenKit.Protocol;
 using System;
 
 namespace Dynatrace.OpenKit.Core.Communication
@@ -62,26 +78,12 @@ namespace Dynatrace.OpenKit.Core.Communication
                 reinitializeDelayIndex = Math.Min(reinitializeDelayIndex + 1, REINIT_DELAY_MILLISECONDS.Length - 1); // ensure no out of bounds
             }
 
-            if (context.IsShutdownRequested)
-            {
-                // shutdown was requested -> abort init with failure
-                // transition to shutdown state is handled by base class
-                context.InitCompleted(false);
-            }
-            else if (statusResponse != null)
+            if (!context.IsShutdownRequested && statusResponse != null)
             {
                 // success -> continue with time sync
                 context.HandleStatusResponse(statusResponse);
                 context.CurrentState = new BeaconSendingTimeSyncState(true);
             }
-        }
-
-        private static bool RetryStatusRequest(IBeaconSendingContext context, StatusResponse statusResponse, int retry)
-        {
-            return statusResponse == null
-                && (retry < MAX_INITIAL_STATUS_REQUEST_RETRIES)
-                && !context.IsShutdownRequested;
-                
         }
     }
 }

@@ -1,17 +1,36 @@
-﻿using NUnit.Framework;
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+using NUnit.Framework;
 using Dynatrace.OpenKit.Core.Configuration;
 using Dynatrace.OpenKit.Providers;
 using NSubstitute;
 using Dynatrace.OpenKit.Protocol;
+using Dynatrace.OpenKit.API;
+using Dynatrace.OpenKit.Core.Caching;
 
 namespace Dynatrace.OpenKit.Core.Communication
 {
     public class BeaconSendingContextTest
     {
-        private AbstractConfiguration config;
+        private OpenKitConfiguration config;
         private IHTTPClientProvider clientProvider;
         private ITimingProvider timingProvider;
         private AbstractBeaconSendingState nonTerminalStateMock;
+        private ILogger logger = new DefaultLogger(true);
 
         [SetUp]
         public void Setup()
@@ -21,7 +40,7 @@ namespace Dynatrace.OpenKit.Core.Communication
             timingProvider = Substitute.For<ITimingProvider>();
             nonTerminalStateMock = Substitute.For<AbstractBeaconSendingState>(false);
         }
-        
+
         [Test]
         public void ContextIsInitializedWithInitState()
         {
@@ -69,7 +88,7 @@ namespace Dynatrace.OpenKit.Core.Communication
         [Test]
         public void ResetEventIsSetOnInitFailed()
         {
-            
+
             var target = new BeaconSendingContext(config, clientProvider, timingProvider);
 
             target.InitCompleted(false);
@@ -77,7 +96,7 @@ namespace Dynatrace.OpenKit.Core.Communication
 
             Assert.That(actual, Is.False);
         }
-        
+
         [Test]
         public void IsInitializedOnInitSuccess()
         {
@@ -150,7 +169,7 @@ namespace Dynatrace.OpenKit.Core.Communication
 
             target.RequestShutdown();
 
-            Assert.True(target.IsShutdownRequested);            
+            Assert.True(target.IsShutdownRequested);
         }
 
         [Test]
@@ -213,7 +232,7 @@ namespace Dynatrace.OpenKit.Core.Communication
         [Test]
         public void CanGetHttpClient()
         {
-            var expected = Substitute.For<HTTPClient>("", "", 0, false);
+            var expected = Substitute.For<HTTPClient>(new DefaultLogger(true), new HTTPClientConfiguration("", 0, "", null));
 
             clientProvider.CreateClient(Arg.Any<HTTPClientConfiguration>()).Returns(expected);
 
@@ -231,13 +250,13 @@ namespace Dynatrace.OpenKit.Core.Communication
         {
             clientProvider
                 .CreateClient(Arg.Any<HTTPClientConfiguration>())
-                .Returns(Substitute.For<HTTPClient>("", "", 0, false));
+                .Returns(Substitute.For<HTTPClient>(new DefaultLogger(true), new HTTPClientConfiguration("", 0, "", null)));
 
             var target = new BeaconSendingContext(config, clientProvider, timingProvider);
 
             var actual = target.GetHTTPClient();
 
-            clientProvider.Received(1).CreateClient(config.HttpClientConfig);
+            clientProvider.Received(1).CreateClient(config.HTTPClientConfig);
         }
 
         [Test]
@@ -249,7 +268,7 @@ namespace Dynatrace.OpenKit.Core.Communication
             var target = new BeaconSendingContext(config, clientProvider, timingProvider);
 
             var actual = target.CurrentTimestamp;
-                        
+
             Assert.AreEqual(expected, actual);
             timingProvider.Received(1).ProvideTimestampInMilliseconds();
         }
@@ -273,7 +292,13 @@ namespace Dynatrace.OpenKit.Core.Communication
 
             target.Sleep(expected);
 
+#if !NETCOREAPP1_0
             timingProvider.Received(1).Sleep(expected);
+#else
+            timingProvider.Received(2).Sleep(Arg.Any<int>());
+            timingProvider.Received(1).Sleep(1000);
+            timingProvider.Received(1).Sleep(717);
+#endif
         }
 
         [Test]
@@ -281,8 +306,9 @@ namespace Dynatrace.OpenKit.Core.Communication
         {
             // given
             var target = new BeaconSendingContext(config, clientProvider, timingProvider);
-            // TODO - thomas.grassauer@dynatrace.com - session adds itself ... should we keep this?
-            var session = new Session(config, "127.0.0.1", new BeaconSender(target));
+
+            var session = new Session(new BeaconSender(target), new Beacon(Substitute.For<ILogger>(), new BeaconCache(),
+                config, "127.0.0.1", Substitute.For<IThreadIDProvider>(), timingProvider));
 
             Assert.That(target.GetAllOpenSessions().Count, Is.EqualTo(1));
 
@@ -293,6 +319,20 @@ namespace Dynatrace.OpenKit.Core.Communication
             Assert.That(target.GetAllOpenSessions(), Is.Empty);
             Assert.That(target.GetNextFinishedSession(), Is.SameAs(session));
             Assert.That(target.GetNextFinishedSession(), Is.Null);
+        }
+
+        [Test]
+        public void DisableCaptureDisablesItInTheConfiguration()
+        {
+            // given
+            var target = new BeaconSendingContext(config, clientProvider, timingProvider);
+            config.EnableCapture();
+
+            // when disabling capture
+            target.DisableCapture();
+
+            // then it's disabled again
+            Assert.That(config.IsCaptureOn, Is.False);
         }
     }
 }

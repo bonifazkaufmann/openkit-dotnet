@@ -1,4 +1,22 @@
-﻿using Dynatrace.OpenKit.Core.Configuration;
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+using Dynatrace.OpenKit.API;
+using Dynatrace.OpenKit.Core.Caching;
+using Dynatrace.OpenKit.Core.Configuration;
 using Dynatrace.OpenKit.Protocol;
 using Dynatrace.OpenKit.Providers;
 using NSubstitute;
@@ -9,12 +27,11 @@ namespace Dynatrace.OpenKit.Core.Communication
 {
     public class BeaconSendingCaptureOnStateTest
     {
-        private AbstractConfiguration config = new TestConfiguration();
+        private OpenKitConfiguration config = new TestConfiguration();
         private Queue<Session> finishedSessions;
         private List<Session> openSessions;
         private long currentTime = 0;
         private long lastTimeSyncTime = 1;
-        private long lastOpenSessionSendTime = -1;
 
         private IHTTPClient httpClient;
         private ITimingProvider timingProvider;
@@ -27,7 +44,6 @@ namespace Dynatrace.OpenKit.Core.Communication
         {
             currentTime = 1;
             lastTimeSyncTime = 1;
-            lastOpenSessionSendTime = -1;
             openSessions = new List<Session>();
             finishedSessions = new Queue<Session>();
 
@@ -45,6 +61,7 @@ namespace Dynatrace.OpenKit.Core.Communication
             context.HTTPClientProvider.Returns(x => httpClientProvider);
             context.GetHTTPClient().Returns(x => httpClient);
             context.LastTimeSyncTime.Returns(x => currentTime); // always return the current time to prevent re-sync
+            context.IsCaptureOn.Returns(true);
 
             // beacon sender
             beaconSender = new BeaconSender(config, httpClientProvider, timingProvider);
@@ -53,10 +70,10 @@ namespace Dynatrace.OpenKit.Core.Communication
             context.IsTimeSyncSupported.Returns(true);
 
             // current time getter
-            context.CurrentTimestamp.Returns(x => timingProvider.ProvideTimestampInMilliseconds()); 
+            context.CurrentTimestamp.Returns(x => timingProvider.ProvideTimestampInMilliseconds());
 
             // last time sycn getter + setter
-            context.LastTimeSyncTime = Arg.Do<long>(x => lastTimeSyncTime = x); 
+            context.LastTimeSyncTime = Arg.Do<long>(x => lastTimeSyncTime = x);
             context.LastTimeSyncTime = lastTimeSyncTime;
 
             // sessions
@@ -89,7 +106,7 @@ namespace Dynatrace.OpenKit.Core.Communication
         {
             // given
             var lastTimeSync = 1;
-                        
+
             context.LastTimeSyncTime.Returns(lastTimeSync); // return fixed value
             context.CurrentTimestamp.Returns(lastTimeSync + BeaconSendingTimeSyncState.TIME_SYNC_INTERVAL_IN_MILLIS + 1); // timesync interval + 1 sec
 
@@ -109,8 +126,6 @@ namespace Dynatrace.OpenKit.Core.Communication
             context.IsCaptureOn.Returns(false);
             var statusResponse = new StatusResponse(string.Empty, 200);
 
-            // TODO - thomas.grassauer@dynatrace.com - check this!!!!
-            // at least one send request has to be performed. otherwise context.IsCaptureOn will never be evaluated
             finishedSessions.Enqueue(CreateValidSession(clientIp));
             httpClient.SendBeaconRequest(Arg.Any<string>(), Arg.Any<byte[]>()).Returns(x => statusResponse);
 
@@ -134,50 +149,6 @@ namespace Dynatrace.OpenKit.Core.Communication
 
             // then
             context.Received(1).CurrentState = Arg.Any<BeaconSendingFlushSessionsState>();
-        }
-
-        [Test]
-        public void BeaconSendingIsRetriedForFinishedSessions()
-        {
-            // TODO - thomas.grassauer@dynatrace.com - we do not want to sleep ... we need an to replace Thread.Sleep() in Beacon.SendBeaconRequest
-
-            // given 
-            var clientIp = "127.0.0.1";
-            finishedSessions.Enqueue(CreateValidSession(clientIp));
-            httpClient.SendBeaconRequest(Arg.Any<string>(), Arg.Any<byte[]>()).Returns(x => null);
-
-            // when 
-            var target = new BeaconSendingCaptureOnState();
-            target.Execute(context);
-
-            // then
-            httpClient.Received(BeaconSendingCaptureOnState.BEACON_SEND_RETRY_ATTEMPTS + 1).SendBeaconRequest(clientIp, Arg.Any<byte[]>());
-        }
-
-        [Test]
-        public void BeaconSendingIsRetriedForOpenSessions()
-        {
-            // TODO - thomas.grassauer@dynatrace.com - we do not want to sleep ... we need an to replace Thread.Sleep() in Beacon.SendBeaconRequest
-
-            // given 
-            var clientIp = "127.0.0.1";
-
-            var lastSendTime = 1;
-            var sendInterval = 1000;
-
-            context.LastOpenSessionBeaconSendTime.Returns(lastSendTime);
-            context.SendInterval.Returns(sendInterval);
-            context.CurrentTimestamp.Returns(lastSendTime + sendInterval + 1);
-            httpClient.SendBeaconRequest(Arg.Any<string>(), Arg.Any<byte[]>()).Returns(x => null);
-
-            openSessions.Add(CreateValidSession(clientIp));
-
-            // when 
-            var target = new BeaconSendingCaptureOnState();
-            target.Execute(context);
-
-            // then
-            httpClient.Received(BeaconSendingCaptureOnState.BEACON_SEND_RETRY_ATTEMPTS + 1).SendBeaconRequest(clientIp, Arg.Any<byte[]>());
         }
 
         [Test]
@@ -222,8 +193,46 @@ namespace Dynatrace.OpenKit.Core.Communication
             Assert.That(finishedSessions.Count, Is.EqualTo(0)); // assert empty sessions
             context.DidNotReceive().HandleStatusResponse(Arg.Any<StatusResponse>());
         }
+        
+        [Test]
+        public void UnsuccessfulFinishedSessionsAreMovedBackToCache()
+        {
+            //given
+            var target = new BeaconSendingCaptureOnState();
+
+            var finishedSession = CreateValidSession("127.0.0.1");
+            context.GetNextFinishedSession().Returns(finishedSession);
+            httpClient.SendBeaconRequest(Arg.Any<string>(), Arg.Any<byte[]>()).Returns((StatusResponse)null);
+
+
+            //when calling execute
+            target.Execute(context);
+
+            context.Received(1).GetNextFinishedSession();
+            context.Received(1).PushBackFinishedSession(finishedSession);
+        }
 
         [Test]
+        public void ABeaconSendingCaptureOnStateContinuesWithNextFinishedSessionIfSendingWasUnsuccessfulButBeaconIsEmtpy()
+        {
+            //given
+            var target = new BeaconSendingCaptureOnState();
+
+            var finishedEmptySession = CreateEmptySession("127.0.0.2");
+            var finishedSession = CreateValidSession("127.0.0.1");
+
+            var statusResponses = new Queue<StatusResponse>();
+            context.GetNextFinishedSession().Returns(finishedEmptySession, finishedSession, null);
+            httpClient.SendBeaconRequest(Arg.Any<string>(), Arg.Any<byte[]>()).Returns(new StatusResponse(string.Empty, 200));
+            
+            //when calling execute
+            target.Execute(context);
+
+            context.Received(3).GetNextFinishedSession();
+            context.Received(0).PushBackFinishedSession(finishedSession);
+        }
+
+    [Test]
         public void OpenSessionsAreSentIfSendIntervalIsExceeded()
         {
             // given
@@ -277,18 +286,20 @@ namespace Dynatrace.OpenKit.Core.Communication
             context.DidNotReceive().HandleStatusResponse(Arg.Any<StatusResponse>());
         }
 
-        private Session CreateValidSession(string clientIp)
+        private Session CreateValidSession(string clientIP)
         {
-            var session = new Session(config, clientIp, beaconSender);
+            var session = new Session(beaconSender, new Beacon(Substitute.For<ILogger>(), new BeaconCache(), 
+                config, clientIP, Substitute.For<IThreadIDProvider>(), timingProvider));
 
             session.EnterAction("Foo").LeaveAction();
 
             return session;
         }
 
-        private Session CreateEmptySession(string clientIp)
+        private Session CreateEmptySession(string clientIP)
         {
-            return new Session(config, clientIp, beaconSender);
+            return new Session(beaconSender, new Beacon(Substitute.For<ILogger>(), new BeaconCache(),
+                config, clientIP, Substitute.For<IThreadIDProvider>(), timingProvider));
         }
     }
 }

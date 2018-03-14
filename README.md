@@ -1,5 +1,9 @@
 # Dynatrace OpenKit - .NET Reference Implementation
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Build status](https://ci.appveyor.com/api/projects/status/eynj6e2on09d63wg?svg=true)](https://ci.appveyor.com/project/openkitdt/openkit-dotnet)
+
+
 ## What is the OpenKit?
 
 The OpenKit provides an easy and lightweight way to get insights into applications with Dynatrace/AppMon by instrumenting the source code of those applications.
@@ -18,12 +22,12 @@ This repository contains the reference implementation in pure .NET/C#. Other imp
 * Create Sessions and User Actions
 * Report values, events, errors and crashes
 * Trace web requests to server-side PurePaths
-* Sessions can be tagged with a user id
+* Tag Sessions with a user tag
 * Use it together with Dynatrace or AppMon
 
 ## What you cannot do with the OpenKit
-* Create server-side PurePaths (you have to use an ADK for that)
-* Create metrics (you have to use an ADK for that)
+* Create server-side PurePaths (this functionality is provided by [OneAgent SDKs](https://github.com/Dynatrace/OneAgent-SDK))
+* Create metrics (this functionality is provided by [OneAgent SDKs](https://github.com/Dynatrace/OneAgent-SDK))
 
 ## Design Principles
 * API should be as simple and easy-to-understand as possible
@@ -42,6 +46,7 @@ This repository contains the reference implementation in pure .NET/C#. Other imp
 ### Building the Source
 * .NET Framework 3.5+ or .NET Core 1.0+
 * Visual Studio 2017 (to open VS solution)
+* In order to run all unit tests you must install the latest SDKs for both Framework and Core (approved: .Net Core 1.1.7+, .Net Core 2.1.4+, Framework 4.6.2+)
 
 ## Building the Source
 
@@ -110,7 +115,7 @@ Crashes are used to report (unhandled) exceptions on an `ISession`.
 
 ### Identify Users
 
-OpenKit enables you to tag sessions with unique user ids. The user id is a string 
+OpenKit enables you to tag sessions with unique user tags. The user tag is a String 
 that allows to uniquely identify a single user.
 
 ## Example
@@ -121,12 +126,16 @@ Detailed explanation is available in [example.md](docs/example.md).
 ```cs
 string applicationName = "My OpenKit application";
 string applicationID = "application-id";
-long visitorID = 42L;
-string endpointURL = "https://tenantid.beaconurl.com";
+long deviceID = 42L;
+string endpointURL = "https://tenantid.beaconurl.com/mbeacon";
 
-IOpenKit openKit = OpenKitFactory.CreateDynatraceInstance(applicationName, applicationID, visitorID, endpointURL);
-openKit.Initialize();
-openKit.WaitForInitCompletion();
+IOpenKit openKit = new DynatraceOpenKitBuilder(endpointURL, applicationID, deviceID)
+    .WithApplicationName(applicationName)
+    .WithApplicationVersion("1.0.0.0")
+    .WithOperatingSystem("Windows 10")
+    .WithManufacturer("MyCompany")
+    .WithModelID("MyModelID")
+    .Build();
 
 string clientIP = "8.8.8.8";
 ISession session = openKit.CreateSession(clientIP);
@@ -144,18 +153,3 @@ rootAction.LeaveAction();
 session.End();
 openKit.ShutDown();
 ``` 
-
-## Known Current Limitations
-* it's only possible to have one OpenKit instance running as providers are static
-
-## TODOs
-* add samples/tests
-* add multiple time syncs for Dynatrace, especially for long running applications
-* move providers from static to instance (multiple OpenKits -> multiple providers)
-* prevent re-entrances e.g. of startup/shutdown
-* add HTTPS support and certificate verification
-* HTTP optimizations (reuse connection, pool http client?)
-* provide simple samples to get started as markdown
-* add more verbose logging
-* introduce traffic control
-* currently gzipping is done with code taken from DotNetZip (http://dotnetzip.codeplex.com/), investigate other solution with .NET framework (no luck so far!)

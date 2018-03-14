@@ -1,8 +1,19 @@
-﻿/***************************************************
- * (c) 2016-2017 Dynatrace LLC
- *
- * @author: Christian Schwarzbauer
- */
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
 using Dynatrace.OpenKit.Core.Communication;
 using Dynatrace.OpenKit.Core.Configuration;
 using Dynatrace.OpenKit.Providers;
@@ -25,7 +36,7 @@ namespace Dynatrace.OpenKit.Core
         // sending state context
         private readonly IBeaconSendingContext context;
 
-        public BeaconSender(AbstractConfiguration configuration, IHTTPClientProvider clientProvider, ITimingProvider provider)
+        public BeaconSender(OpenKitConfiguration configuration, IHTTPClientProvider clientProvider, ITimingProvider provider)
             : this(new BeaconSendingContext(configuration, clientProvider, provider))
         {
         }
@@ -85,10 +96,7 @@ namespace Dynatrace.OpenKit.Core
         // when starting a new Session, put it into open Sessions
         public void StartSession(Session session)
         {
-            if (context.IsCaptureOn)
-            {
-                context.StartSession(session);
-            }
+            context.StartSession(session);
         }
 
         // when finishing a Session, remove it from open Sessions and put it into finished Sessions

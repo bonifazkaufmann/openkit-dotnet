@@ -1,4 +1,20 @@
-﻿using Dynatrace.OpenKit.Protocol;
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+using Dynatrace.OpenKit.Protocol;
 
 namespace Dynatrace.OpenKit.Core.Communication
 {
@@ -14,14 +30,12 @@ namespace Dynatrace.OpenKit.Core.Communication
     /// </summary>
     internal class BeaconSendingCaptureOnState : AbstractBeaconSendingState
     {
-        public const int BEACON_SEND_RETRY_ATTEMPTS = 2;
-
         /// <summary>
         /// stores the last status response
         /// </summary>
         private StatusResponse statusResponse = null;
 
-        public BeaconSendingCaptureOnState() : base(false) {}
+        public BeaconSendingCaptureOnState() : base(false) { }
 
         internal override AbstractBeaconSendingState ShutdownState => new BeaconSendingFlushSessionsState();
 
@@ -55,7 +69,21 @@ namespace Dynatrace.OpenKit.Core.Communication
             var finishedSession = context.GetNextFinishedSession();
             while (finishedSession != null)
             {
-                statusResponse = finishedSession.SendBeacon(context.HTTPClientProvider, BEACON_SEND_RETRY_ATTEMPTS);
+                statusResponse = finishedSession.SendBeacon(context.HTTPClientProvider);
+                if (statusResponse == null)
+                {
+                    // something went wrong,
+                    if (!finishedSession.IsEmpty)
+                    {
+                        // well there is more data to send, and we could not do it (now)
+                        // just push it back
+                        context.PushBackFinishedSession(finishedSession);
+                        break; //  sending did not work, break out for now and retry it later
+                    }
+                }
+
+                // session was sent - so remove it from beacon cache
+                finishedSession.ClearCapturedData();
                 finishedSession = context.GetNextFinishedSession();
             }
         }
@@ -71,7 +99,7 @@ namespace Dynatrace.OpenKit.Core.Communication
             var openSessions = context.GetAllOpenSessions();
             foreach (var session in openSessions)
             {
-                statusResponse = session.SendBeacon(context.HTTPClientProvider, BEACON_SEND_RETRY_ATTEMPTS);
+                statusResponse = session.SendBeacon(context.HTTPClientProvider);
             }
 
             // update open session send timestamp
@@ -91,6 +119,6 @@ namespace Dynatrace.OpenKit.Core.Communication
                 // capturing is turned off -> make state transition
                 context.CurrentState = new BeaconSendingCaptureOffState();
             }
-        }        
+        }
     }
 }

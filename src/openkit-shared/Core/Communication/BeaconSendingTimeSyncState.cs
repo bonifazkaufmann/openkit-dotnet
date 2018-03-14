@@ -1,4 +1,19 @@
-﻿using Dynatrace.OpenKit.Providers;
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
 using System;
 using System.Collections.Generic;
 
@@ -13,7 +28,8 @@ namespace Dynatrace.OpenKit.Core.Communication
     /// <ul>
     ///     <li><see cref="BeaconSendingCaptureOnState"/> if IsCaptureOn is <code>true</code></li>
     ///     <li><see cref="BeaconSendingCaptureOffState"/> if IsCaptureOn is <code>false</code> or time sync failed</li>
-    ///     <li><see cref="BeaconSendingTerminalState"/> on shutdown</li>
+    ///     <li><see cref="BeaconSendingFlushSessionsState"/> on shutdown if not initial time sync</li>
+    ///     <li><see cref="BeaconSendingTerminalState"/> on shutdown if initial time sync</li>
     /// </ul>
     /// </summary>
     internal class BeaconSendingTimeSyncState : AbstractBeaconSendingState
@@ -90,7 +106,7 @@ namespace Dynatrace.OpenKit.Core.Communication
             }
 
             // initialize time provider with cluster time offset
-            TimeProvider.Initialize(ComputeClusterTimeOffset(timeSyncOffsets), true);
+            context.InitializeTimeSync(ComputeClusterTimeOffset(timeSyncOffsets), true);
 
             // update the last sync time
             context.LastTimeSyncTime = context.CurrentTimestamp;
@@ -103,9 +119,9 @@ namespace Dynatrace.OpenKit.Core.Communication
         {
             // if this is the initial sync try, we have to initialize the time provider
             // in every other case we keep the previous setting
-            if (IsInitialTimeSync) 
+            if (IsInitialTimeSync)
             {
-                TimeProvider.Initialize(0, false);
+                context.InitializeTimeSync(0, context.IsTimeSyncSupported);
             }
 
             if (context.IsTimeSyncSupported)
@@ -218,7 +234,7 @@ namespace Dynatrace.OpenKit.Core.Communication
                 return false;
             }
 
-            return ((context.LastTimeSyncTime < 0) 
+            return ((context.LastTimeSyncTime < 0)
                 || (context.CurrentTimestamp - context.LastTimeSyncTime > TIME_SYNC_INTERVAL_IN_MILLIS));
         }
 

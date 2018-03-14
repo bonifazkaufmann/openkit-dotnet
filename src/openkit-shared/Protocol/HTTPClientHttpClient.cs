@@ -1,11 +1,33 @@
-﻿namespace Dynatrace.OpenKit.Protocol
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+using Dynatrace.OpenKit.API;
+using Dynatrace.OpenKit.Core.Configuration;
+
+namespace Dynatrace.OpenKit.Protocol
 {
 #if (!NET40 && !NET35)
 
     public class HTTPClientHttpClient : HTTPClient
     {
-        public HTTPClientHttpClient(string baseURL, string applicationID, int serverID, bool verbose) : base(baseURL, applicationID, serverID, verbose)
+        private readonly System.Net.Security.RemoteCertificateValidationCallback remoteCertificateValidationCallback;
+
+        public HTTPClientHttpClient(ILogger logger, HTTPClientConfiguration configuration) : base(logger, configuration)
         {
+            remoteCertificateValidationCallback = configuration.SSLTrustManager?.ServerCertificateValidationCallback;
         }
 
         protected override HTTPResponse GetRequest(string url, string clientIPAddress)
@@ -31,9 +53,30 @@
             }
         }
 
-        private static System.Net.Http.HttpClient CreateHTTPClient (string clientIPAddress)
+        private System.Net.Http.HttpClient CreateHTTPClient(string clientIPAddress)
         {
-            System.Net.Http.HttpClient httpClient = new System.Net.Http.HttpClient();
+            System.Net.Http.HttpClient httpClient;
+
+            if (remoteCertificateValidationCallback == null)
+            {
+                httpClient = new System.Net.Http.HttpClient();
+            }
+            else
+            {
+#if NET45 || NET46
+                // special handling for .NET 4.5 & 4.6, since the HttpClientHandler does not have the ServerCertificateValidationCallback
+                System.Net.Http.WebRequestHandler webRequestHandler = new System.Net.Http.WebRequestHandler();
+                webRequestHandler.ServerCertificateValidationCallback += remoteCertificateValidationCallback;
+                httpClient = new System.Net.Http.HttpClient(webRequestHandler, true);
+#else
+                System.Net.Http.HttpClientHandler httpClientHandler = new System.Net.Http.HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = remoteCertificateValidationCallback.Invoke
+                };
+                httpClient = new System.Net.Http.HttpClient(httpClientHandler, true);
+#endif
+            }
+
             if (clientIPAddress != null)
             {
                 httpClient.DefaultRequestHeaders.Add("X-Client-IP", clientIPAddress);

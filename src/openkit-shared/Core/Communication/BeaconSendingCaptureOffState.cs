@@ -1,5 +1,20 @@
-﻿using Dynatrace.OpenKit.Protocol;
-using Dynatrace.OpenKit.Providers;
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+using Dynatrace.OpenKit.Protocol;
 
 namespace Dynatrace.OpenKit.Core.Communication
 {
@@ -30,15 +45,17 @@ namespace Dynatrace.OpenKit.Core.Communication
         /// </summary>
         public const int STATUS_CHECK_INTERVAL = 2 * 60 * 60 * 1000;    // wait 2h (in ms) for next status request
 
-        public BeaconSendingCaptureOffState() : base(false) {}
+        public BeaconSendingCaptureOffState() : base(false) { }
 
         internal override AbstractBeaconSendingState ShutdownState => new BeaconSendingFlushSessionsState();
 
         protected override void DoExecute(IBeaconSendingContext context)
         {
+            context.DisableCapture();
+
             var currentTime = context.CurrentTimestamp;
 
-            var delta = (int) (STATUS_CHECK_INTERVAL - (currentTime - context.LastStatusCheckTime));
+            var delta = (int)(STATUS_CHECK_INTERVAL - (currentTime - context.LastStatusCheckTime));
             if (delta > 0 && !context.IsShutdownRequested)
             {
                 // still have some time to sleep
@@ -62,7 +79,7 @@ namespace Dynatrace.OpenKit.Core.Communication
                 context.HandleStatusResponse(statusResponse);
             }
             // if initial time sync failed before
-            if (context.IsTimeSyncSupported && !TimeProvider.IsTimeSynced)
+            if (context.IsTimeSyncSupported && !context.IsTimeSynced)
             {
                 // then retry initial time sync
                 context.CurrentState = new BeaconSendingTimeSyncState(true);

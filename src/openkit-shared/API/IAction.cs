@@ -1,14 +1,29 @@
-﻿/***************************************************
- * (c) 2016-2017 Dynatrace LLC
- *
- * @author: Christian Schwarzbauer
- */
-namespace Dynatrace.OpenKit.API {
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+using System;
+
+namespace Dynatrace.OpenKit.API
+{
 
     /// <summary>
     ///  This interface provides functionality to report events/values/errors and traces web requests.
     /// </summary>
-    public interface IAction {       
+    public interface IAction : IDisposable
+    {
 
         /// <summary>
         ///  Reports an event with a specified name (but without any value).
@@ -49,31 +64,6 @@ namespace Dynatrace.OpenKit.API {
         /// <param name="reason">reason for this error</param>
         /// <returns>this Action (for usage as fluent API)</returns>
         IAction ReportError(string errorName, int errorCode, string reason);
-
-#if NET40 || NET35
-
-        /// <summary>
-        ///  Traces a web request - which is provided via an WebClient - and allows adding timing information to this request.
-        ///  If the web request is continued on a server-side Agent (e.g. Java, .NET, ...) this Session will be correlated to
-        ///  the resulting server-side PurePath.
-        /// </summary>
-        /// <param name="webClient">the WebClient of the HTTP request to be traced and timed</param>
-        /// <returns>a WebRequestTracer which allows adding timing information</returns>
-        /// <remarks>This method is for .NET 4.0 and .NET 3.5 only, since <code>System.Net.Http.HttpClient</code> is not available.</remarks>
-        IWebRequestTracer TraceWebRequest(System.Net.WebClient webClient);
-
-#else
-
-        /// <summary>
-        ///  Traces a web request - which is provided via an HttpClient - and allows adding timing information to this request.
-        ///  If the web request is continued on a server-side Agent (e.g. Java, .NET, ...) this Session will be correlated to
-        ///  the resulting server-side PurePath.
-        /// </summary>
-        /// <param name="httpClient">the HttpClient of the HTTP request to be traced and timed</param>
-        /// <returns>a WebRequestTracer which allows adding timing information</returns>
-        IWebRequestTracer TraceWebRequest(System.Net.Http.HttpClient httpClient);
-
-#endif
 
         /// <summary>
         ///  Allows tracing and timing of a web request handled by any 3rd party HTTP Client (e.g. Apache, Google, ...).

@@ -1,8 +1,19 @@
-﻿/***************************************************
- * (c) 2016-2017 Dynatrace LLC
- *
- * @author: Christian Schwarzbauer
- */
+﻿//
+// Copyright 2018 Dynatrace LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
@@ -15,7 +26,7 @@ using System.Runtime.CompilerServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Dynatrace LLC")]
 [assembly: AssemblyProduct("Dynatrace.OpenKit.Properties")]
-[assembly: AssemblyCopyright("(c) 2016-2017 Dynatrace LLC")]
+[assembly: AssemblyCopyright("(c) 2016-2018 Dynatrace LLC")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -34,14 +45,15 @@ using System.Runtime.CompilerServices;
 //      Build Number
 //      Revision
 //
-[assembly: AssemblyVersion("0.3.0.0")]
-[assembly: AssemblyFileVersion("0.3.0.0")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
 
 // Expose internal classes to test assemblies
+[assembly: InternalsVisibleTo("openkit-dotnetcore-1.0.Tests")]
 [assembly: InternalsVisibleTo("openkit-dotnetcore-2.0.Tests")]
 [assembly: InternalsVisibleTo("openkit-dotnetfull-3.5.Tests")]
 [assembly: InternalsVisibleTo("openkit-dotnetfull-4.0.Tests")]
 [assembly: InternalsVisibleTo("openkit-dotnetfull-4.5.Tests")]
 [assembly: InternalsVisibleTo("openkit-dotnetfull-4.6.Tests")]
 // Expose internal classes to NSubstitute
-[assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")] 
+[assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
